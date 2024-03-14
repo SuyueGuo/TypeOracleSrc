@@ -22,7 +22,7 @@ import os
 import monitor
 
 TESTDIR = 'test'
-SNUM = 256
+SNUM = 1024
 TNUM = 200000
 
 def getname(elem):
@@ -65,7 +65,16 @@ class JSFuzz:
             except Exception as e:
                 pass
 
+    def runPDF(self):
+        flst = os.listdir(TESTDIR)
+        flst.sort(key=getname)
+        for fname in flst:
+            m = monitor.Monitor(fname)
+            m.startUp()
+            m.writeResult()
+
 
 if __name__ == '__main__':
     f = JSFuzz()
     f.startup()
+    f.runPDF()

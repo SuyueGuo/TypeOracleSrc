@@ -25,13 +25,15 @@ fp1 = os.path.join('config','strlst.json')
 fp2 = os.path.join('config','objlst.txt')
 with open(fp1,'r') as f:
     l1 = json.loads(f.read())
-interesting_str = ['''""''', '''"1!23"''', '''"\\\\x01"''', '''"\\\\xfe\\\\xff"''', '''"https://invalid.noexist.com/abc"''']
+interesting_str = ['''"a" + String.fromCharCode(0x4141)''', '''""''', '''"1!23"''', '''"\\\\x01"''', '''"\\\\xfe\\\\xff"''', '''"https://invalid.noexist.com/abc"''']
 interesting_str.extend(l1)
+interesting_number = ['-1', '0x7fffffff', '0xffffffff', '256', '255', '127', '128']
 with open(fp2,'r') as f:
     raw = f.read()
 l2 = [i for i in raw.split('\n') if len(i)>0]
 
 constant_dic = {
+    '1': interesting_number, 
     '2': l2,
     '3': interesting_str
 } #1number,  2 obj, 3 string
@@ -43,8 +45,12 @@ def rand_bool():
 
 
 def rand_num():
-    c = '' if rand.P(33) else '-' #1/3
-    return '%s%s' % (c, rand.rand_integer())
+    if rand.P(50):
+        c = '' if rand.P(33) else '-' #1/3
+        return '%s%s.%s' % (c, rand.rand_integer(), ''.join(reversed(rand.rand_integer())))
+    else:
+        c = '' if rand.P(33) else '-' #1/3
+        return '%s%s' % (c, rand.rand_integer())
 
 
 def rand_obj():
@@ -72,6 +78,8 @@ randfunc_dic = {
 
 
 def rand_dispatcher(typeid):
+    if rand.P(1): # 10% random value
+        typeid = '5'
     if typeid == '5' or typeid == 5: # some setter is 5
         ntypeid = random.choice(['0', '1', '2', '3'])
     else:
@@ -93,7 +101,7 @@ class Pattern:
         self.cur_valdic = {}
         self.valindex = 0
         self.prefix_content = []
-        self.complex_flag = 0
+        self.complex_flag = 1
         self.retindex = 0
 
     def clear_status(self):
@@ -101,7 +109,7 @@ class Pattern:
         self.old_valdic = {}
         self.cur_valdic = {}
         self.prefix_content = []
-        self.complex_flag = 0
+        self.complex_flag = 1
         self.retindex = 0
 
     def set_complex_flag(self, flag):
@@ -136,10 +144,18 @@ class Pattern:
 
     def basictype_objarg(self, typeid):
         cur_val = self.basictype_dispatcher(typeid, 0)
+        tmp1 = 'var fs%d = function(){f%d();return %s;}' % (
+            self.valindex, self.valindex, cur_val)
         tmp2 = 'var os%d = {};' % (self.valindex)
-        return 'os%d' % self.valindex, tmp2
+        for i in range(random.randint(0, 3)):
+            tmp2 = tmp2 + 'os%d[%s] = %s;' % (self.valindex, self.basictype_dispatcher('5', 0), self.basictype_dispatcher('5', 0))
+        if typeid == '3':
+            tmp2 += 'os%d.toString = fs%d' % (self.valindex, self.valindex)
+        else:
+            tmp2 += 'os%d.valueOf = fs%d' % (self.valindex, self.valindex)
+        return 'os%d' % self.valindex, tmp1+'\n'+tmp2
 
-    def basictype_dispatcher(self, typeid, complex_flag=0):
+    def basictype_dispatcher(self, typeid, complex_flag=1):
         if rand.P(10) and typeid in constant_dic: # 10% contant object or string
             return random.choice(constant_dic[typeid])
         elif complex_flag and rand.P(10) and typeid in self.old_valdic and len(self.old_valdic[typeid])>0: # 10% already exist value
@@ -217,14 +233,22 @@ class Pattern:
 
     def complextype_objarg(self, typeid, content, recpair):
         cur_val = self.basictype_dispatcher(recpair[1], 0)
+        tmp1 = 'var fs%d = function(){f%d();return %s;}' % (
+            self.valindex, self.valindex, cur_val)
         tmp2 = 'var os%d = %s;' % (self.valindex, content)
         if typeid.startswith('22'):
-            tmp2 += '\n'
+            tmp3 = 'Object.defineProperties(os%d, {%d: {get: fs%d}});' % (
+                self.valindex, recpair[0], self.valindex
+            )
+            tmp2 += '\n'+tmp3
         elif typeid.startswith('23'):
-            tmp2 += '\n'
-        return 'os%d' % self.valindex, tmp2
+            tmp3 = 'Object.defineProperties(os%d, {%s: {get: fs%d}});' % (
+                self.valindex, recpair[0], self.valindex
+            )
+            tmp2 += '\n'+tmp3
+        return 'os%d' % self.valindex, tmp1+'\n'+tmp2
 
-    def complextype_dispatcher(self, typeid, complex_flag=0):
+    def complextype_dispatcher(self, typeid, complex_flag=1):
         # print(complex_flag)
         info = self.arg_pattern['info']
 
@@ -286,7 +310,7 @@ if __name__ == '__main__':
     p = Pattern(dic)
     res = []
     for _ in range(50):
-        p.set_complex_flag(0)
+        p.set_complex_flag(1)
         r = p.create()
         res.append(r)
         print(p.get_valindex())
